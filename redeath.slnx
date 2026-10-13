@@ -1,0 +1,22 @@
+﻿<Solution>
+  <Project Path="Mirror.csproj" />
+  <Project Path="Edgegap.csproj" />
+  <Project Path="Mirror.Components.csproj" />
+  <Project Path="Mirror.Editor.csproj" />
+  <Project Path="Unity.InputSystem.RebindingUI.csproj" />
+  <Project Path="Telepathy.csproj" />
+  <Project Path="kcp2k.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Mirror.Transports.csproj" />
+  <Project Path="FMODUnityResonanceEditor.csproj" />
+  <Project Path="FMODUnityEditor.csproj" />
+  <Project Path="FMODUnity.csproj" />
+  <Project Path="SimpleWebTransport.csproj" />
+  <Project Path="Unity.Mirror.CodeGen.csproj" />
+  <Project Path="FMODUnityHaptics.csproj" />
+  <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="FMODUnityResonance.csproj" />
+  <Project Path="Mirror.CompilerSymbols.csproj" />
+  <Project Path="Mirror.Authenticators.csproj" />
+  <Project Path="EncryptionTransportEditor.csproj" />
+</Solution>

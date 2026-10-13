@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="AudioFile" id="{93e05fb6-69a4-40e8-a1d3-272b65135e50}">
+		<property name="assetPath">
+			<value>Player/Footsteps/Water/Antons_Footsteps_FS_Water_Walk_05.wav</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>44.0999985</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>0.53931972789115645</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{2abf8d96-8152-40e4-811a-e9ade6a13476}</destination>
+		</relationship>
+	</object>
+</objects>
