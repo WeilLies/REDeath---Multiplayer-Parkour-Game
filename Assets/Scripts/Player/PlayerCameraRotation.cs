@@ -7,6 +7,11 @@ public class PlayerCameraRotation : MonoBehaviour
     [SerializeField] private Camera playerCamera;
     [SerializeField] private float maxAngleY = 90f;
     [SerializeField] private float smoothTime = 0.05f;
+
+    [Header("Slide Camera Settings")]
+    [SerializeField] private PlayerController playerController;
+    [SerializeField] private float maxSlideAngleX = 45f;
+
     public Camera PlayerCamera => playerCamera;
 
     private Vector2 cameraRotation;
@@ -20,11 +25,17 @@ public class PlayerCameraRotation : MonoBehaviour
 
     private float cameraSensitivity = 1f;
 
+    private bool wasSliding;
+    private float bodyYawAtSlideStart;
+
     private void Awake()
     {
         inputManager = ServiceLocator.Get<IInputManager>();
         settingsManager = ServiceLocator.Get<ISettingsManager>();
         inputState = ServiceLocator.Get<IInputState>();
+
+        if (playerController == null)
+            playerController = GetComponentInParent<PlayerController>();
 
         if (inputState != null)
             inputState.AddLock(InputState.LockType.Cursor, "InitPlayer");
@@ -41,10 +52,10 @@ public class PlayerCameraRotation : MonoBehaviour
             settingsManager.OnParametersChanged -= ChangeSensitivityValue;
     }
 
-    private void Update() 
+    private void Update()
         => CameraRotation();
 
-    private void ChangeSensitivityValue() 
+    private void ChangeSensitivityValue()
         => cameraSensitivity = settingsManager != null ? settingsManager.GetParametersValue<float>("Sensitivity") : 1f;
 
     private void CameraRotation()
@@ -59,6 +70,8 @@ public class PlayerCameraRotation : MonoBehaviour
 
         if (cameraLocked) { return; }
 
+        bool isSliding = playerController != null && playerController.IsSliding;
+
         currentInput = inputManager.GetInput<Vector2>("LookInput") * cameraSensitivity;
 
         smoothedInput.x = Mathf.SmoothDamp(smoothedInput.x, currentInput.x, ref inputVelocity.x, smoothTime);
@@ -69,7 +82,24 @@ public class PlayerCameraRotation : MonoBehaviour
 
         cameraRotation.y = Mathf.Clamp(cameraRotation.y, -maxAngleY, maxAngleY);
 
-        cameraTransform.localRotation = Quaternion.Euler(-cameraRotation.y, 0f, 0f);
-        bodyTransform.rotation = Quaternion.Euler(0f, cameraRotation.x, 0f);
+        if (isSliding)
+        {
+            if (!wasSliding)
+                bodyYawAtSlideStart = bodyTransform.eulerAngles.y;
+
+            float slideYawOffset = Mathf.DeltaAngle(bodyYawAtSlideStart, cameraRotation.x);
+            slideYawOffset = Mathf.Clamp(slideYawOffset, -maxSlideAngleX, maxSlideAngleX);
+            cameraRotation.x = bodyYawAtSlideStart + slideYawOffset;
+
+            bodyTransform.rotation = Quaternion.Euler(0f, bodyYawAtSlideStart, 0f);
+            cameraTransform.localRotation = Quaternion.Euler(-cameraRotation.y, slideYawOffset, 0f);
+        }
+        else
+        {
+            cameraTransform.localRotation = Quaternion.Euler(-cameraRotation.y, 0f, 0f);
+            bodyTransform.rotation = Quaternion.Euler(0f, cameraRotation.x, 0f);
+        }
+
+        wasSliding = isSliding;
     }
 }

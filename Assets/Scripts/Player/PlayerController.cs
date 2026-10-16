@@ -1,6 +1,16 @@
 using System;
 using UnityEngine;
 
+public enum PlayerState
+{
+    Idle,
+    Walk,
+    Run,
+    Fall,
+    Crouch,
+    Slide
+}
+
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
@@ -14,14 +24,12 @@ public class PlayerController : MonoBehaviour
     [Header("Run Acceleration Settings")]
     [SerializeField] private AnimationCurve runSpeedCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
     [SerializeField] private float runAccelerationDuration = 3f;
+    [SerializeField] private float walkSpeedReachTolerance = 0.05f;
 
     [Header("Turning Settings")]
-    [SerializeField] private float maxTurnAngleForFullStop = 180f;
-    [SerializeField] private float turnAngleRecoverySpeed = 540f;
-    [SerializeField] private float turnSensitivity = 1f;
-    [SerializeField] private float minAngularSpeedToAccumulate = 1f;
-    [SerializeField] private AnimationCurve turnSpeedPenaltyCurve = AnimationCurve.Linear(0f, 1f, 1f, 0f);
-    [SerializeField] private float minTurnSpeed = 0.5f;
+    [SerializeField] private float turnSensitivity = 60f;
+    [SerializeField] private float turnSlowdownIntensity = 0.01f;
+    [SerializeField] private float turnMultiplierChangeSpeed = 2f;
 
     [Header("Crouching Settings")]
     [SerializeField] private LayerMask crouchStandLayers;
@@ -46,6 +54,22 @@ public class PlayerController : MonoBehaviour
     [Header("Landing Event Settings")]
     [SerializeField] private float minAirborneTimeForLanding = 0.1f;
 
+    [Header("Player State Settings")]
+    [SerializeField] private float movementStateThreshold = 0.1f;
+
+    [Header("Slide Settings")]
+    [SerializeField] private float minSpeedStartSlide = 3f;
+    [SerializeField] private float minSpeedEndSlide = 2f;
+    [SerializeField] private float slideSpeedLoseIntensity = 1f;
+    [SerializeField] private float slideHeight = 0.5f;
+
+    [Header("Slope Settings")]
+    [SerializeField] private float groundNormalCheckDistance = 0.4f;
+    [SerializeField] private float slopeStickForce = 8f;
+    [SerializeField] private LayerMask groundCheckLayers = ~0;
+
+    public PlayerState CurrentState { get; private set; } = PlayerState.Idle;
+
     private float startHeight;
     private float targetHeight;
 
@@ -57,14 +81,15 @@ public class PlayerController : MonoBehaviour
     private Vector3 landingInertiaVelocity;
 
     private bool wishCrouch;
+    private bool wishSlide;
     private float currentHeightVelocity;
     private float sprintElapsedTime;
 
     private float previousYaw;
-    private float turnAngleAccumulator;
     private float turnSpeedMultiplier = 1f;
 
     private Vector3 lastIntendedVelocity;
+    private Vector3 currentGroundNormal = Vector3.up;
 
     public Vector2 CurrentInputVector { get; private set; }
     public Vector2 CurrentInputVectorInt { get; private set; }
@@ -75,6 +100,7 @@ public class PlayerController : MonoBehaviour
     public bool IsSprinting { get; private set; }
     public bool IsGrounded { get; private set; }
     public bool IsCrouching { get; private set; }
+    public bool IsSliding { get; private set; }
 
     private float ungroundedTime;
 
@@ -82,6 +108,9 @@ public class PlayerController : MonoBehaviour
     public event Action<float> OnPlayerFallDown;
     public event Action OnPlayerCrouchUp;
     public event Action OnPlayerCrouchDown;
+    public event Action OnPlayerStateChanged;
+    public event Action OnPlayerStartSlide;
+    public event Action OnPlayerEndSlide;
 
     private IInputManager inputManager;
     private IInputState inputState;
@@ -107,6 +136,7 @@ public class PlayerController : MonoBehaviour
         HandleCrouch();
         HandleTurning();
         HandleMovementAndJump();
+        UpdatePlayerState();
     }
 
     private void HandleTurning()
@@ -117,24 +147,35 @@ public class PlayerController : MonoBehaviour
 
         float angularSpeed = Time.deltaTime > 0f ? yawDelta / Time.deltaTime : 0f;
 
-        if (angularSpeed > minAngularSpeedToAccumulate)
-            turnAngleAccumulator += yawDelta * turnSensitivity;
-        else
-            turnAngleAccumulator = Mathf.MoveTowards(turnAngleAccumulator, 0f, turnAngleRecoverySpeed * Time.deltaTime);
+        float excessSpeed = Mathf.Max(0f, angularSpeed - turnSensitivity);
 
-        turnAngleAccumulator = Mathf.Clamp(turnAngleAccumulator, 0f, maxTurnAngleForFullStop);
+        float targetMultiplier = Mathf.Clamp01(1f - excessSpeed * turnSlowdownIntensity);
 
-        float normalizedTurn = maxTurnAngleForFullStop > 0f
-            ? turnAngleAccumulator / maxTurnAngleForFullStop
-            : 0f;
-
-        turnSpeedMultiplier = turnSpeedPenaltyCurve.Evaluate(normalizedTurn);
+        turnSpeedMultiplier = Mathf.MoveTowards(turnSpeedMultiplier, targetMultiplier, Time.deltaTime * turnMultiplierChangeSpeed);
     }
 
     private void GroundCheck()
     {
         bool wasGrounded = IsGrounded;
         IsGrounded = characterController.isGrounded;
+
+        if (IsGrounded)
+        {
+            Vector3 origin = transform.position + Vector3.up * (characterController.radius + 0.05f);
+            if (Physics.SphereCast(origin, characterController.radius * 0.9f, Vector3.down,
+                out RaycastHit hit, groundNormalCheckDistance, groundCheckLayers, QueryTriggerInteraction.Ignore))
+            {
+                currentGroundNormal = hit.normal;
+            }
+            else
+            {
+                currentGroundNormal = Vector3.up;
+            }
+        }
+        else
+        {
+            currentGroundNormal = Vector3.up;
+        }
 
         if (!IsGrounded)
             ungroundedTime += Time.deltaTime;
@@ -172,9 +213,11 @@ public class PlayerController : MonoBehaviour
                     MoveVector.y > 0f &&
                     !IsCrouching;
 
-        if (IsSprinting)
+        bool hasReachedWalkSpeed = CurrentMovementSpeed >= playerWalkSpeed - walkSpeedReachTolerance;
+
+        if (IsSprinting && hasReachedWalkSpeed)
             sprintElapsedTime = Mathf.Min(sprintElapsedTime + Time.deltaTime, runAccelerationDuration);
-        else
+        else if (!IsSprinting)
             sprintElapsedTime = 0f;
 
         CurrentInputVector = Vector2.SmoothDamp(CurrentInputVector, MoveVector, ref smoothInputVelocity, smoothInputSpeed);
@@ -185,7 +228,11 @@ public class PlayerController : MonoBehaviour
 
         float targetSpeed;
 
-        if (IsCrouching)
+        if (IsSliding)
+        {
+            targetSpeed = CurrentMovementSpeed;
+        }
+        else if (IsCrouching)
         {
             targetSpeed = playerCrouchSpeed;
         }
@@ -200,18 +247,28 @@ public class PlayerController : MonoBehaviour
             targetSpeed = playerWalkSpeed;
         }
 
-        CurrentMovementSpeed = Mathf.Lerp(CurrentMovementSpeed, targetSpeed, Time.deltaTime * smoothChangeSpeedValue);
+        if (IsSliding)
+            CurrentMovementSpeed = targetSpeed;
+        else
+            CurrentMovementSpeed = Mathf.Lerp(CurrentMovementSpeed, targetSpeed, Time.deltaTime * smoothChangeSpeedValue);
 
         float effectiveMovementSpeed = CurrentMovementSpeed;
 
         if (IsGrounded)
-        {
-            float penalizedSpeed = CurrentMovementSpeed * turnSpeedMultiplier;
-            float clampedMinTurnSpeed = Mathf.Min(minTurnSpeed, CurrentMovementSpeed);
-            effectiveMovementSpeed = Mathf.Max(penalizedSpeed, clampedMinTurnSpeed);
-        }
+            effectiveMovementSpeed = CurrentMovementSpeed * turnSpeedMultiplier;
 
-        Vector3 movementVector = Vector3.ClampMagnitude(rightMove + forwardMove, 1f) * effectiveMovementSpeed;
+        Vector3 moveDirectionInput = IsSliding
+            ? transform.forward
+            : Vector3.ClampMagnitude(rightMove + forwardMove, 1f);
+
+        Vector3 movementVector = moveDirectionInput * effectiveMovementSpeed;
+
+        if (IsGrounded)
+        {
+            Vector3 projected = Vector3.ProjectOnPlane(movementVector, currentGroundNormal);
+            if (projected.sqrMagnitude > 0.0001f)
+                movementVector = projected.normalized * movementVector.magnitude;
+        }
 
         if (IsGrounded)
             moveDirection = movementVector;
@@ -220,7 +277,12 @@ public class PlayerController : MonoBehaviour
 
         if (IsGrounded)
         {
-            if (playerVelocity.y < -2f) playerVelocity.y = -2f;
+            float slopeDot = Vector3.Dot(currentGroundNormal, Vector3.up);
+            float slopeFactor = 1f - Mathf.Clamp01(slopeDot);
+            float stickVelocity = -2f - slopeStickForce * slopeFactor;
+
+            if (playerVelocity.y < 0f)
+                playerVelocity.y = stickVelocity;
 
             if (!moveLocked &&
                 jumpInput &&
@@ -255,7 +317,7 @@ public class PlayerController : MonoBehaviour
 
             float achievedRatio = achievedSpeedAlongIntent / intendedHorizontalSpeed;
 
-            if (achievedRatio < wallBlockRatioThreshold && CurrentMovementSpeed > playerWalkSpeed)
+            if (achievedRatio < wallBlockRatioThreshold && CurrentMovementSpeed > playerWalkSpeed && !IsSliding)
             {
                 CurrentMovementSpeed = playerWalkSpeed;
                 sprintElapsedTime = 0f;
@@ -270,34 +332,137 @@ public class PlayerController : MonoBehaviour
     private void HandleCrouch()
     {
         bool moveLocked = inputState.GetLockState(InputState.LockType.Move);
-        bool crouchInput = inputManager.GetInput<bool>("CrouchInput");
+        float crouchInput = inputManager.GetInput<float>("CrouchInput");
 
-        if (!moveLocked && crouchInput)
-            wishCrouch = !wishCrouch;
+        bool isCrouchHeld = crouchInput > 0.1f;
 
-        float checkDistance = startHeight - crouchHeight;
-        bool canStand = !Physics.SphereCast(transform.position, characterController.radius,
-            Vector3.up, out _, checkDistance, crouchStandLayers, QueryTriggerInteraction.Ignore);
+        bool slideRequirements = MoveVector.y > 0f && CurrentFullSpeed >= minSpeedStartSlide;
 
-        bool wasCrouching = IsCrouching;
+        wishCrouch = !moveLocked && IsGrounded && isCrouchHeld && !slideRequirements && !IsSliding;
+        wishSlide = !moveLocked && IsGrounded && isCrouchHeld && (slideRequirements || IsSliding);
 
         if (wishCrouch)
         {
-            targetHeight = crouchHeight;
-            IsCrouching = true;
+            StartCrouch();
         }
-        else if (canStand)
+        else if (wishSlide)
         {
-            targetHeight = startHeight;
-            IsCrouching = false;
+            StartSlide();
         }
 
-        if (IsCrouching && !wasCrouching)
-            OnPlayerCrouchDown?.Invoke();
-        else if (!IsCrouching && wasCrouching)
-            OnPlayerCrouchUp?.Invoke();
+        if (!wishCrouch)
+        {
+            EndCrouch();
+        }
+
+        if (!wishSlide)
+        {
+            EndSlide();
+        }
 
         characterController.height = Mathf.SmoothDamp(characterController.height, targetHeight,
-            ref currentHeightVelocity, crouchTransitionSpeed * Time.deltaTime);
+        ref currentHeightVelocity, crouchTransitionSpeed * Time.deltaTime);
+    }
+
+    private void StartCrouch()
+    {
+        if (!IsCrouching && !IsSliding)
+        {
+            targetHeight = crouchHeight;
+            IsCrouching = true;
+            OnPlayerCrouchDown?.Invoke();
+        }
+    }
+    private void EndCrouch()
+    {
+        if (IsCrouching)
+        {
+            float checkDistance = startHeight - crouchHeight;
+            bool canStand = !Physics.SphereCast(transform.position, characterController.radius,
+                Vector3.up, out _, checkDistance, crouchStandLayers, QueryTriggerInteraction.Ignore);
+
+            if (canStand)
+            {
+                targetHeight = startHeight;
+                IsCrouching = false;
+                OnPlayerCrouchUp?.Invoke();
+            }
+        }
+    }
+
+    private void StartSlide()
+    {
+        if (!IsSliding && !IsCrouching)
+        {
+            IsSliding = true;
+            targetHeight = slideHeight;
+            CurrentMovementSpeed = Mathf.Max(CurrentFullSpeed, minSpeedStartSlide);
+            OnPlayerStartSlide?.Invoke();
+        }
+
+        if (IsSliding)
+        {
+            CurrentMovementSpeed = Mathf.Lerp(CurrentMovementSpeed, minSpeedEndSlide - 0.1f, slideSpeedLoseIntensity * Time.deltaTime);
+
+            if (CurrentMovementSpeed <= minSpeedEndSlide)
+            {
+                CurrentMovementSpeed = minSpeedEndSlide;
+                EndSlide();
+            }
+        }
+    }
+
+    private void EndSlide()
+    {
+        if (IsSliding)
+        {
+            IsSliding = false;
+
+            float checkDistance = startHeight - slideHeight;
+            bool canStand = !Physics.SphereCast(transform.position, characterController.radius,
+                Vector3.up, out _, checkDistance, crouchStandLayers, QueryTriggerInteraction.Ignore);
+
+            targetHeight = canStand ? startHeight : crouchHeight;
+            IsCrouching = !canStand;
+
+            OnPlayerEndSlide?.Invoke();
+        }
+    }
+
+    private void UpdatePlayerState()
+    {
+        PlayerState newState;
+        float horizontalSpeed = new Vector3(characterController.velocity.x, 0f, characterController.velocity.z).magnitude;
+        bool isMoving = horizontalSpeed > movementStateThreshold || CurrentInputVector.sqrMagnitude > movementStateThreshold * movementStateThreshold;
+        if (!IsGrounded)
+        {
+            newState = PlayerState.Fall;
+        }
+        else if (IsSliding)
+        {
+            newState = PlayerState.Slide;
+        }
+        else if (IsCrouching)
+        {
+            newState = PlayerState.Crouch;
+        }
+        else if (IsSprinting && isMoving)
+        {
+            newState = PlayerState.Run;
+        }
+        else if (isMoving)
+        {
+            newState = PlayerState.Walk;
+        }
+        else
+        {
+            newState = PlayerState.Idle;
+        }
+        if (newState != CurrentState)
+        {
+            PlayerState previousState = CurrentState;
+            CurrentState = newState;
+            OnPlayerStateChanged?.Invoke();
+        }
     }
 }

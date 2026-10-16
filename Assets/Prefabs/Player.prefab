@@ -739,6 +739,8 @@ MonoBehaviour:
   playerCamera: {fileID: 5657697543803232428}
   maxAngleY: 80
   smoothTime: 0.01
+  playerController: {fileID: 0}
+  maxSlideAngleX: 45
 --- !u!1 &2852135657595038940
 GameObject:
   m_ObjectHideFlags: 0
@@ -2512,7 +2514,6 @@ GameObject:
   m_Component:
   - component: {fileID: 8176546017204104651}
   - component: {fileID: 8996130853556778610}
-  - component: {fileID: 1950911233578949234}
   - component: {fileID: 4195926602642421329}
   m_Layer: 6
   m_Name: Player
@@ -2552,9 +2553,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerSystem.PlayerController
   playerWalkSpeed: 4
-  playerRunSpeed: 7
+  playerRunSpeed: 8
   playerCrouchSpeed: 2.5
-  smoothInputSpeed: 0.15
+  accelerationSpeed: 0.15
+  decelerationSpeed: 0.15
   smoothChangeSpeedValue: 5
   runSpeedCurve:
     serializedVersion: 2
@@ -2599,35 +2601,10 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   runAccelerationDuration: 5
-  maxTurnAngleForFullStop: 180
-  turnAngleRecoverySpeed: 540
-  turnSensitivity: 0.2
-  minAngularSpeedToAccumulate: 1
-  turnSpeedPenaltyCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: -1
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: -1
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  minTurnSpeed: 3
+  walkSpeedReachTolerance: 0.05
+  turnSensitivity: 180
+  turnSlowdownIntensity: 0.006
+  turnMultiplierChangeSpeed: 2
   crouchStandLayers:
     serializedVersion: 2
     m_Bits: 1
@@ -2635,45 +2612,24 @@ MonoBehaviour:
   crouchHeight: 0.8
   airControlFactor: 1
   playerGravity: -19.8
-  jumpHeight: 0.6
+  jumpHeight: 0.5
   landingInertiaStrength: 0.5
   landingInertiaDamping: 6
   minLandingSpeedForInertia: 1
   maxLandingInertiaSpeed: 6
-  groundLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  groundCheckDistance: 0.3
-  groundCheckRadiusMultiplier: 0.9
-  minSlopeSlideAngle: 30
-  maxSlopeSlideAngle: 75
-  maxSlopeSlideSpeed: 8
-  slopeSlideSpeedMultiplier: 1.5
-  slopeSlideAcceleration: 8
-  slopeMoveControlFactor: 0.3
-  crouchSlopeSlideMultiplier: 0.6
   minIntendedSpeedToCheckWall: 0.05
   wallBlockRatioThreshold: 0.3
   minAirborneTimeForLanding: 0.1
---- !u!114 &1950911233578949234
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7083286197146636746}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bc61cbc4b1322404c81c24d972a150fd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  playerObject: {fileID: 7083286197146636746}
-  castTransform: {fileID: 7417506843391048383}
-  maxDistance: 3
-  direction: {x: 0, y: 0, z: 1}
-  layer:
-    serializedVersion: 2
-    m_Bits: 1
+  movementStateThreshold: 0.1
+  minSpeedStartSlide: 3
+  minSpeedEndSlide: 1
+  slideSpeedLoseIntensity: 1.5
+  slideHeight: 0.5
+  flyViewTransform: {fileID: 3799530796124300313}
+  flySpeed: 6
+  flySprintSpeed: 12
+  flySpeedChangeRate: 5
+  flyVerticalSpeedMultiplier: 1
 --- !u!143 &4195926602642421329
 CharacterController:
   m_ObjectHideFlags: 0

@@ -17,17 +17,20 @@ public class InputManager : MonoBehaviour, IInputManager, IAsyncInitializable
     private InputAction crouchAction;
     private InputAction fireAction;
     private InputAction pauseAction;
+    private InputAction flyAction;
     #endregion
 
     #region Player Input
     public Vector2 MoveInput { get; private set; }
     public Vector2 LookInput { get; private set; }
     public bool JumpInput { get; private set; }
+    public bool JumpHeldInput { get; private set; }
     public float SprintInput { get; private set; }
     public bool InteractInput { get; private set; }
-    public bool CrouchInput { get; private set; }
+    public float CrouchInput { get; private set; }
     public float FireInput { get; private set; }
     public bool PauseInput { get; private set; }
+    public bool FlyInput { get; private set; }
     #endregion
 
     private Dictionary<string, Func<object>> _inputLookup;
@@ -71,6 +74,7 @@ public class InputManager : MonoBehaviour, IInputManager, IAsyncInitializable
         crouchAction = playerMap.FindAction("Crouch");
         fireAction = playerMap.FindAction("Fire");
         pauseAction = playerMap.FindAction("Open Menu");
+        flyAction = playerMap.FindAction("Fly");
     }
 
     private void EnableActions()
@@ -83,6 +87,7 @@ public class InputManager : MonoBehaviour, IInputManager, IAsyncInitializable
         crouchAction.Enable();
         fireAction.Enable();
         pauseAction.Enable();
+        flyAction.Enable();
     }
 
     private void DisableActions()
@@ -95,14 +100,16 @@ public class InputManager : MonoBehaviour, IInputManager, IAsyncInitializable
         crouchAction.Disable();
         fireAction.Disable();
         pauseAction.Disable();
+        flyAction.Disable();
     }
 
     private void UpdatePlayerInput()
     {
         JumpInput = jumpAction.triggered;
+        JumpHeldInput = jumpAction.IsPressed();
         InteractInput = interactAction.triggered;
-        CrouchInput = crouchAction.triggered;
         PauseInput = pauseAction.triggered;
+        FlyInput = flyAction.triggered;
     }
 
     private void RegisterPlayerInputActions()
@@ -118,6 +125,9 @@ public class InputManager : MonoBehaviour, IInputManager, IAsyncInitializable
 
         fireAction.performed += ctx => FireInput = ctx.ReadValue<float>();
         fireAction.canceled += ctx => FireInput = 0f;
+
+        crouchAction.performed += ctx => CrouchInput = ctx.ReadValue<float>();
+        crouchAction.canceled += ctx => CrouchInput = 0f;
     }
 
     private void BuildLookup()
@@ -127,11 +137,13 @@ public class InputManager : MonoBehaviour, IInputManager, IAsyncInitializable
             { nameof(MoveInput),      () => MoveInput      },
             { nameof(LookInput),      () => LookInput      },
             { nameof(JumpInput),      () => JumpInput      },
+            { nameof(JumpHeldInput),  () => JumpHeldInput  },
             { nameof(SprintInput),    () => SprintInput    },
             { nameof(InteractInput),  () => InteractInput  },
             { nameof(CrouchInput),    () => CrouchInput    },
             { nameof(FireInput),      () => FireInput      },
             { nameof(PauseInput),     () => PauseInput     },
+            { nameof(FlyInput),     () => FlyInput     },
         };
     }
 

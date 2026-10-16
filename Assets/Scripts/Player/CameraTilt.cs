@@ -4,7 +4,6 @@ public class CameraTilt : MonoBehaviour
 {
     [SerializeField] private float maxTiltAngle = 10f;
     [SerializeField] private float tiltSpeed = 5f;
-
     private float currentTilt = 0f;
     private IInputManager inputManager;
 
@@ -16,7 +15,7 @@ public class CameraTilt : MonoBehaviour
     private void Update()
     {
         float horizontalInput = inputManager.GetInput<Vector2>("LookInput").x;
-
+    
         float targetTilt = Mathf.Clamp(-horizontalInput, -maxTiltAngle, maxTiltAngle);
 
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * tiltSpeed);
